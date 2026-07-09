@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["enum-map-lite", "enum-map-lite-derive"]

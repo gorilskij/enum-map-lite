@@ -1,0 +1,21 @@
+[package]
+name = "enum-map-lite-derive"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.63"
+authors = ["gorilskij <43991400@users.noreply.github.com>"]
+description = "Derive macro for enum-map-lite's Enum trait."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["enum", "map", "derive", "enum-map", "proc-macro"]
+categories = ["data-structures", "rust-patterns"]
+# TODO: set the repository URL before publishing to crates.io
+# repository = "https://github.com/gorilskij/enum-map-lite"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = "2"

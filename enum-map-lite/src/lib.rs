@@ -1,0 +1,188 @@
+//! A stripped-down [`enum-map`](https://docs.rs/enum-map)-style enum-keyed map.
+//!
+//! An [`EnumMap<K, V>`] is a fixed `[V; K::LENGTH]` array indexed by a fieldless
+//! enum `K`. Unlike `enum-map`, the [`Enum`] trait deliberately has **no
+//! `from_usize`** — the map is a one-way `enum -> value` index. The cost of that
+//! choice: you cannot recover a key from an index, so there is **no key or pair
+//! iteration**. Value iteration (which needs no keys) is fully supported.
+//!
+//! ```
+//! use enum_map_lite::{enum_map, Enum, EnumMap};
+//!
+//! #[derive(Enum, Clone, Copy)]
+//! enum Color { Red, Green, Blue }
+//!
+//! let mut m: EnumMap<Color, i32> = enum_map! {
+//!     Color::Red => 1,
+//!     _ => 0,          // fills Green and Blue at construction time
+//! };
+//! assert_eq!(m[Color::Red], 1);
+//! assert_eq!(m[Color::Blue], 0);
+//! m[Color::Blue] = 5;
+//! assert_eq!(m.values().copied().sum::<i32>(), 6);
+//! ```
+#![no_std]
+
+use core::fmt;
+use core::ops::{Index, IndexMut};
+
+pub use enum_map_lite_derive::Enum;
+
+/// A type usable as an [`EnumMap`] key: a fieldless enum with a dense
+/// `0..LENGTH` indexing. Derive it with `#[derive(Enum)]`.
+///
+/// Note the absence of `from_usize` (present in the `enum-map` crate) — that is
+/// the whole point of this crate.
+pub trait Enum: Sized {
+    /// Number of variants; the length of the backing array.
+    const LENGTH: usize;
+
+    /// Maps a value to its slot index (declaration order: `0, 1, 2, ...`).
+    fn into_usize(self) -> usize;
+}
+
+/// Links a key type `K` to the concrete backing array `[V; K::LENGTH]` for a
+/// given value type `V`. The derive implements this for every `V`.
+///
+/// This mirrors `enum-map`'s `EnumArray` and exists only to name the array type
+/// without needing `generic_const_exprs`.
+pub trait EnumArray<V>: Enum {
+    /// The backing array, `[V; Self::LENGTH]`.
+    type Array: AsRef<[V]> + AsMut<[V]> + IntoIterator<Item = V>;
+
+    /// Builds the backing array by calling `f` for each index `0..LENGTH` in
+    /// order. (Index-based, not key-based — no `from_usize` required.)
+    fn from_index_fn<F: FnMut(usize) -> V>(f: F) -> Self::Array;
+}
+
+/// A total map from every variant of `K` to a `V`, backed by a fixed array.
+pub struct EnumMap<K: EnumArray<V>, V> {
+    array: <K as EnumArray<V>>::Array,
+}
+
+impl<K: EnumArray<V>, V> EnumMap<K, V> {
+    /// Builds a map directly from the backing array.
+    pub fn from_array(array: <K as EnumArray<V>>::Array) -> Self {
+        Self { array }
+    }
+
+    /// Builds a map by calling `f` for each slot index `0..LENGTH` in order.
+    pub fn from_index_fn<F: FnMut(usize) -> V>(f: F) -> Self {
+        Self { array: <K as EnumArray<V>>::from_index_fn(f) }
+    }
+
+    /// The values in slot-index order.
+    pub fn as_slice(&self) -> &[V] {
+        self.array.as_ref()
+    }
+
+    /// The values in slot-index order, mutably.
+    pub fn as_mut_slice(&mut self) -> &mut [V] {
+        self.array.as_mut()
+    }
+
+    /// Infallible lookup (equivalent to `&self[key]`).
+    pub fn get(&self, key: K) -> &V {
+        &self.array.as_ref()[key.into_usize()]
+    }
+
+    /// Infallible mutable lookup (equivalent to `&mut self[key]`).
+    pub fn get_mut(&mut self, key: K) -> &mut V {
+        &mut self.array.as_mut()[key.into_usize()]
+    }
+
+    /// Iterator over `&V` (no keys).
+    pub fn values(&self) -> core::slice::Iter<'_, V> {
+        self.array.as_ref().iter()
+    }
+
+    /// Iterator over `&mut V` (no keys).
+    pub fn values_mut(&mut self) -> core::slice::IterMut<'_, V> {
+        self.array.as_mut().iter_mut()
+    }
+
+    /// Consuming iterator over `V` (no keys).
+    pub fn into_values(self) -> <<K as EnumArray<V>>::Array as IntoIterator>::IntoIter {
+        self.array.into_iter()
+    }
+
+    /// Maps every value, preserving keys.
+    pub fn map<W, F>(self, mut f: F) -> EnumMap<K, W>
+    where
+        F: FnMut(V) -> W,
+        K: EnumArray<W>,
+    {
+        // `into_iter` yields slots 0..LENGTH in order and `from_index_fn` fills
+        // them 0..LENGTH in order, so the two stay aligned.
+        let mut it = self.array.into_iter();
+        EnumMap { array: <K as EnumArray<W>>::from_index_fn(move |_| f(it.next().unwrap())) }
+    }
+}
+
+impl<K: EnumArray<V>, V> Index<K> for EnumMap<K, V> {
+    type Output = V;
+
+    fn index(&self, key: K) -> &V {
+        &self.array.as_ref()[key.into_usize()]
+    }
+}
+
+impl<K: EnumArray<V>, V> IndexMut<K> for EnumMap<K, V> {
+    fn index_mut(&mut self, key: K) -> &mut V {
+        &mut self.array.as_mut()[key.into_usize()]
+    }
+}
+
+impl<'a, K: EnumArray<V>, V> IntoIterator for &'a EnumMap<K, V> {
+    type Item = &'a V;
+    type IntoIter = core::slice::Iter<'a, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values()
+    }
+}
+
+impl<K: EnumArray<V>, V: Clone> Clone for EnumMap<K, V>
+where
+    <K as EnumArray<V>>::Array: Clone,
+{
+    fn clone(&self) -> Self {
+        Self { array: self.array.clone() }
+    }
+}
+
+impl<K: EnumArray<V>, V: Copy> Copy for EnumMap<K, V> where <K as EnumArray<V>>::Array: Copy {}
+
+impl<K: EnumArray<V>, V: fmt::Debug> fmt::Debug for EnumMap<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Value-only: no keys available without `from_usize`.
+        f.debug_list().entries(self.array.as_ref().iter()).finish()
+    }
+}
+
+/// Builds an [`EnumMap`], `enum-map`-style.
+///
+/// Two forms:
+/// - with a `_ => default` catch-all (fills every unlisted variant at
+///   construction time), keys optional:
+///   `enum_map! { K::A => x, _ => y }`
+/// - exhaustive, no catch-all (every listed value wrapped/unwrapped through
+///   `Option`, panics at build time if a variant was missed):
+///   `enum_map! { K::A => x, K::B => y }`
+#[macro_export]
+macro_rules! enum_map {
+    // catch-all default: fill all slots with `$default`, then overwrite listed keys
+    ( $( $key:expr => $val:expr , )* _ => $default:expr $(,)? ) => {{
+        let mut __map = $crate::EnumMap::from_index_fn(|_| $default);
+        $( __map[$key] = $val; )*
+        __map
+    }};
+    // exhaustive: build an Option map, then unwrap (panics if a variant is missing)
+    ( $( $key:expr => $val:expr ),+ $(,)? ) => {{
+        let mut __map = $crate::EnumMap::from_index_fn(|_| ::core::option::Option::None);
+        $( __map[$key] = ::core::option::Option::Some($val); )*
+        __map.map(|__slot| {
+            __slot.expect("enum_map!: a variant was left unset (add a `_ => ...` catch-all)")
+        })
+    }};
+}
