@@ -29,45 +29,61 @@ m[Color::Blue] = 5;
 assert_eq!(m.values().copied().sum::<i32>(), 6);
 ```
 
-Keys are **patterns**, not values, so data-carrying variants never need a
-constructed payload — they key on the discriminant:
+## `enum_map!` keys
+
+Keys are **patterns**, not values — data-carrying variants never need a
+constructed payload. Only the variant matters; fields must be `_` or `..`, never
+bindings or value matching:
 
 ```rust
 use enum_map_lite::{enum_map, Enum, EnumMap};
 
 #[derive(Enum, Clone, Copy)]
-enum Seg { Normal, Eaten { food: u32 }, Crashed }
+enum Event {
+    Tick,                       // unit
+    Key(char),                  // tuple
+    Click(u32, u32),            // tuple
+    Resize { w: u32, h: u32 },  // struct
+    Scroll { delta: i32 },      // struct
+}
 
-let m: EnumMap<Seg, &str> = enum_map! {
-    Seg::Eaten { .. } => "eaten",
-    _ => "other",
+let m: EnumMap<Event, &str> = enum_map! {
+    Event::Tick => "tick",
+    Event::Key(_) => "key",                 // tuple, correct arity
+    Event::Click(..) => "click",            // tuple, elided
+    Event::Resize { .. } => "resize",       // struct, elided
+    Event::Scroll { delta: _ } => "scroll", // struct, named field as `_`
 };
-assert_eq!(m[Seg::Eaten { food: 999 }], "eaten"); // any payload → same slot
+assert_eq!(m[Event::Click(10, 20)], "click"); // any payload → same slot
 ```
 
-## `enum_map!` keys
+An optional `_ => default` catch-all fills every unlisted variant at construction
+time. Without it the key list must be exhaustive — a missing variant panics at
+construction.
 
-Each key is a variant **pattern**; only the variant matters (fields are ignored).
-Any variant shape works, and fields may only be `_` or `..` — never bindings or
-value matching:
+## Generic enums
 
-```text
-Variant                 // unit or any variant by bare path
-Variant()               // empty tuple
-Variant(_, _)           // tuple, correct arity
-Variant(..)             // tuple, elided
-Variant { a: _, b: _ }  // struct, all fields as `_`
-Variant { a: _, .. }    // struct, some fields + `..`
-Variant { .. }          // struct, all elided
+Generic enums work too: the shadow mirror drops the type parameters, so the
+derive is unconditional. Spell the parameters on the key with turbofish so the
+map's key type can be inferred:
+
+```rust
+use enum_map_lite::{enum_map, Enum, EnumMap};
+
+#[derive(Enum, Clone, Copy)]
+enum Slot<T> {
+    Empty,
+    Filled(T),
+    Reserved { by: u32 },
+}
+
+let m: EnumMap<Slot<String>, u8> = enum_map! {
+    Slot::<String>::Filled(..) => 1,
+    _ => 0,
+};
+assert_eq!(m[Slot::Filled("hi".to_string())], 1);
+assert_eq!(m[Slot::<String>::Empty], 0);
 ```
-
-Plus an optional `_ => default` catch-all. Two forms:
-
-- **with `_ => default`** — fills every unlisted variant at build time.
-- **exhaustive, no catch-all** — panics at construction if a variant was missed.
-
-Generic enums work too; spell the type parameters on the key with turbofish
-(`Generic::<T>::Variant(..) => ...`) so the map's key type can be inferred.
 
 ## When to use `enum-map` instead
 

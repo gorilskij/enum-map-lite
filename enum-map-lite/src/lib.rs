@@ -23,6 +23,11 @@
 //! ```
 #![no_std]
 
+// Compile the README's examples as doctests so they can't rot.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 use core::fmt;
 use core::ops::{Index, IndexMut};
 
