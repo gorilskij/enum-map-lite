@@ -40,21 +40,21 @@ use enum_map_lite::{enum_map, Enum, EnumMap};
 
 #[derive(Enum, Clone, Copy)]
 enum Event {
-    Tick,                       // unit
-    Key(char),                  // tuple
-    Click(u32, u32),            // tuple
-    Resize { w: u32, h: u32 },  // struct
-    Scroll { delta: i32 },      // struct
+    Tick,
+    Key(char),
+    Click(u32, u32),
+    Resize { w: u32, h: u32 },
+    Scroll { delta: i32 },
 }
 
 let m: EnumMap<Event, &str> = enum_map! {
     Event::Tick => "tick",
-    Event::Key(_) => "key",                 // tuple, correct arity
-    Event::Click(..) => "click",            // tuple, elided
-    Event::Resize { .. } => "resize",       // struct, elided
-    Event::Scroll { delta: _ } => "scroll", // struct, named field as `_`
+    Event::Key(_) => "key",
+    Event::Click(..) => "click",
+    Event::Resize { .. } => "resize",
+    Event::Scroll { delta: _ } => "scroll",
 };
-assert_eq!(m[Event::Click(10, 20)], "click"); // any payload → same slot
+assert_eq!(m[Event::Click(10, 20)], "click");
 ```
 
 An optional `_ => default` catch-all fills every unlisted variant at construction
