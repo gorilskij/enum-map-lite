@@ -87,8 +87,9 @@ enum Seg {
 #[test]
 fn field_variants_key_on_discriminant() {
     assert_eq!(Seg::LENGTH, 4);
+    // Keys are patterns, not values: fields as `..` / `_`, never real payloads.
     let mut m: EnumMap<Seg, i32> = enum_map! {
-        Seg::Eaten { original_food: 0, food_left: 0 } => 1,
+        Seg::Eaten { .. } => 1,
         _ => 0,
     };
     // any payload maps to the same slot as the pattern above
@@ -97,6 +98,52 @@ fn field_variants_key_on_discriminant() {
     assert_eq!(m[Seg::BlackHole(true)], 0);
     m[Seg::BlackHole(false)] = 42;
     assert_eq!(m[Seg::BlackHole(true)], 42); // field ignored on lookup too
+}
+
+#[test]
+fn all_pattern_key_forms() {
+    // Every variant, whatever its shape, is writable as a pattern key.
+    let m: EnumMap<Seg, i32> = enum_map! {
+        Seg::Normal => 1,                                   // unit / bare path
+        Seg::Eaten { original_food: _, food_left: _ } => 2, // named fields, all `_`
+        Seg::Crashed => 3,
+        Seg::BlackHole(..) => 4,                            // tuple, `..`
+    };
+    assert_eq!(m[Seg::Normal], 1);
+    assert_eq!(m[Seg::Eaten { original_food: 1, food_left: 2 }], 2);
+    assert_eq!(m[Seg::Crashed], 3);
+    assert_eq!(m[Seg::BlackHole(true)], 4);
+
+    // `field: _, ..`, `(_)`, and a catch-all together.
+    let m2: EnumMap<Seg, i32> = enum_map! {
+        Seg::Eaten { original_food: _, .. } => 7,
+        Seg::BlackHole(_) => 8,
+        _ => 0,
+    };
+    assert_eq!(m2[Seg::Eaten { original_food: 5, food_left: 6 }], 7);
+    assert_eq!(m2[Seg::BlackHole(false)], 8);
+    assert_eq!(m2[Seg::Normal], 0);
+}
+
+// A generic enum: the derive must handle it (shadow drops the type params).
+#[derive(Enum, Clone, Copy)]
+#[allow(dead_code)]
+enum Generic<T> {
+    A(T),
+    B { value: T },
+    C,
+}
+
+#[test]
+fn generic_enum_derive() {
+    assert_eq!(Generic::<String>::LENGTH, 3);
+    let m: EnumMap<Generic<String>, i32> = enum_map! {
+        Generic::<String>::A(..) => 1,
+        Generic::<String>::B { .. } => 2,
+        Generic::<String>::C => 3,
+    };
+    assert_eq!(m[Generic::A("x".to_string())], 1);
+    assert_eq!(m[Generic::<String>::C], 3);
 }
 
 #[test]

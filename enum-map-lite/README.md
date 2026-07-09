@@ -29,7 +29,8 @@ m[Color::Blue] = 5;
 assert_eq!(m.values().copied().sum::<i32>(), 6);
 ```
 
-Data-carrying variants key on the discriminant — any payload picks the same slot:
+Keys are **patterns**, not values, so data-carrying variants never need a
+constructed payload — they key on the discriminant:
 
 ```rust
 use enum_map_lite::{enum_map, Enum, EnumMap};
@@ -38,16 +39,35 @@ use enum_map_lite::{enum_map, Enum, EnumMap};
 enum Seg { Normal, Eaten { food: u32 }, Crashed }
 
 let m: EnumMap<Seg, &str> = enum_map! {
-    Seg::Eaten { food: 0 } => "eaten",  // placeholder payload
+    Seg::Eaten { .. } => "eaten",
     _ => "other",
 };
-assert_eq!(m[Seg::Eaten { food: 999 }], "eaten"); // field ignored
+assert_eq!(m[Seg::Eaten { food: 999 }], "eaten"); // any payload → same slot
 ```
 
-## `enum_map!` forms
+## `enum_map!` keys
 
-- with a `_ => default` catch-all (fills every unlisted variant at build time)
-- exhaustive, no catch-all (panics at construction if a variant was missed)
+Each key is a variant **pattern**; only the variant matters (fields are ignored).
+Any variant shape works, and fields may only be `_` or `..` — never bindings or
+value matching:
+
+```text
+Variant                 // unit or any variant by bare path
+Variant()               // empty tuple
+Variant(_, _)           // tuple, correct arity
+Variant(..)             // tuple, elided
+Variant { a: _, b: _ }  // struct, all fields as `_`
+Variant { a: _, .. }    // struct, some fields + `..`
+Variant { .. }          // struct, all elided
+```
+
+Plus an optional `_ => default` catch-all. Two forms:
+
+- **with `_ => default`** — fills every unlisted variant at build time.
+- **exhaustive, no catch-all** — panics at construction if a variant was missed.
+
+Generic enums work too; spell the type parameters on the key with turbofish
+(`Generic::<T>::Variant(..) => ...`) so the map's key type can be inferred.
 
 ## When to use `enum-map` instead
 

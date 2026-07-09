@@ -1,6 +1,6 @@
 [package]
 name = "enum-map-lite-derive"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.63"
 authors = ["gorilskij <43991400@users.noreply.github.com>"]
@@ -17,4 +17,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1"
 quote = "1"
-syn = "2"
+syn = { version = "2", features = ["full"] }
