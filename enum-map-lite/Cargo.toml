@@ -9,8 +9,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["enum", "map", "array", "enum-map", "no-std"]
 categories = ["data-structures", "no-std::no-alloc"]
-# TODO: set the repository URL before publishing to crates.io
-# repository = "https://github.com/gorilskij/enum-map-lite"
+repository = "https://github.com/gorilskij/enum-map-lite"
 
 [dependencies]
 enum-map-lite-derive = { path = "../enum-map-lite-derive", version = "0.1.0" }
